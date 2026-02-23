@@ -36,7 +36,7 @@ class MotorController(Node):
 
     def cmd_vel_callback(self, msg):
         # Extract forward/back (linear) and rotation (angular) speeds
-        linear = msg.linear.x
+        linear = -msg.linear.x
         angular = msg.angular.z
 
         # Differential Drive Math (Mixing steering and throttle)
