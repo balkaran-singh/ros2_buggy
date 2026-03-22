@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Buggy Controller</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/eventemitter2@6.4.9/lib/eventemitter2.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/roslib@1/build/roslib.min.js"></script>
+
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; background-color: #222; color: white; margin-top: 30px; }
+        #status { font-size: 1.2em; font-weight: bold; margin-bottom: 10px; color: red; }
+        
+        /* Slider CSS */
+        .slider-container { margin: 20px auto; width: 80%; max-width: 300px; background: #333; padding: 15px; border-radius: 10px; }
+        .slider-container p { margin: 0 0 10px 0; font-weight: bold; font-size: 1.1em; }
+        input[type=range] { width: 100%; height: 20px; cursor: pointer; }
+
+        /* D-Pad Container */
+        .dpad { display: grid; grid-template-columns: 80px 80px 80px; grid-template-rows: 80px 80px 80px; gap: 10px; justify-content: center; margin-top: 20px; }
+        
+        /* Button Base CSS */
+        .btn { 
+            background-color: #444; color: white; border: none; border-radius: 10px; font-size: 24px; font-weight: bold;
+            touch-action: manipulation; user-select: none; cursor: pointer;
+            transition: transform 0.1s, background-color 0.1s; /* Smooth press effect */
+        }
+        
+        /* The "Pressed" State (Triggers on both Mouse Click and Keyboard Press) */
+        .btn:active, .btn.active { 
+            background-color: #888; 
+            transform: scale(0.90); /* Shrinks slightly to look pressed */
+        }
+        
+        #btn-up { grid-column: 2; grid-row: 1; }
+        #btn-left { grid-column: 1; grid-row: 2; }
+        #btn-stop { grid-column: 2; grid-row: 2; background-color: #d9534f; }
+        #btn-stop:active, #btn-stop.active { background-color: #c9302c; } /* Darker red when pressed */
+        #btn-right { grid-column: 3; grid-row: 2; }
+        #btn-down { grid-column: 2; grid-row: 3; }
+    </style>
+</head>
+<body>
+
+    <h2>ROS 2 Buggy Control</h2>
+    <div id="status">Disconnected</div>
+    
+    <div class="slider-container">
+        <p>Max Speed: <span id="speed-display">50</span>%</p>
+        <input type="range" id="speed-slider" min="10" max="100" step="5" value="50">
+    </div>
+
+    <p>Use <b>WASD</b>, <b>Arrow Keys</b>, or <b>Buttons</b> to drive.</p>
+
+    <div class="dpad">
+        <button class="btn" id="btn-up">W</button>
+        <button class="btn" id="btn-left">A</button>
+        <button class="btn" id="btn-stop">STOP</button>
+        <button class="btn" id="btn-right">D</button>
+        <button class="btn" id="btn-down">S</button>
+    </div>
+
+    <script>
+        // 1. CONNECT TO ROSBRIDGE (Update IP!)
+        var ros = new ROSLIB.Ros({
+            url : 'ws://172.16.217.158:9090' // <--- PUT RASPBERRY PI IP HERE
+        });
+
+        ros.on('connection', () => {
+            document.getElementById("status").innerHTML = "Connected to Buggy!";
+            document.getElementById("status").style.color = "lime";
+        });
+        ros.on('error', () => {
+            document.getElementById("status").innerHTML = "Error connecting.";
+            document.getElementById("status").style.color = "red";
+        });
+        ros.on('close', () => {
+            document.getElementById("status").innerHTML = "Disconnected.";
+            document.getElementById("status").style.color = "red";
+        });
+
+        var cmdVel = new ROSLIB.Topic({
+            ros : ros,
+            name : '/cmd_vel',
+            messageType : 'geometry_msgs/Twist'
+        });
+
+        // 2. STATE TRACKING
+        let currentDirection = 'stop'; 
+        
+        // 3. SLIDER LOGIC (Fixed to update offline)
+        const speedSlider = document.getElementById('speed-slider');
+        const speedDisplay = document.getElementById('speed-display');
+
+        function getSpeed() {
+            return parseFloat(speedSlider.value) / 100.0;
+        }
+
+        // Use 'input' event listener for real-time sliding
+        speedSlider.addEventListener('input', function() {
+            speedDisplay.innerText = this.value; // Instantly updates the text
+            if (currentDirection !== 'stop') {
+                applyMovement(currentDirection); // Updates buggy if currently moving
+            }
+        });
+
+        // 4. CORE MOVEMENT FUNCTION
+        function applyMovement(direction) {
+            currentDirection = direction;
+            let linear = 0.0;
+            let angular = 0.0;
+            let speed = getSpeed();
+
+            if (direction === 'forward') linear = speed;
+            else if (direction === 'backward') linear = -speed;
+            else if (direction === 'left') angular = speed; 
+            else if (direction === 'right') angular = -speed; 
+
+            var twist = new ROSLIB.Message({
+                linear : { x : linear, y : 0.0, z : 0.0 },
+                angular : { x : 0.0, y : 0.0, z : angular }
+            });
+            cmdVel.publish(twist);
+        }
+
+        const goForward = () => applyMovement('forward');
+        const goBackward = () => applyMovement('backward');
+        const goLeft = () => applyMovement('left');
+        const goRight = () => applyMovement('right');
+        const stopBuggy = () => applyMovement('stop');
+
+        // 5. HTML BUTTON BINDINGS
+        document.getElementById('btn-up').onmousedown = goForward;
+        document.getElementById('btn-down').onmousedown = goBackward;
+        document.getElementById('btn-left').onmousedown = goLeft;
+        document.getElementById('btn-right').onmousedown = goRight;
+        
+        document.querySelectorAll('.btn').forEach(btn => {
+            btn.onmouseup = stopBuggy;
+            btn.ontouchend = stopBuggy;
+        });
+
+        document.getElementById('btn-up').ontouchstart = goForward;
+        document.getElementById('btn-down').ontouchstart = goBackward;
+        document.getElementById('btn-left').ontouchstart = goLeft;
+        document.getElementById('btn-right').ontouchstart = goRight;
+        document.getElementById('btn-stop').onmousedown = stopBuggy;
+
+        // 6. KEYBOARD LOGIC WITH VISUAL FEEDBACK
+        let activeKey = null;
+
+        // Map keys to their corresponding HTML button IDs
+        const keyMap = {
+            'KeyW': 'btn-up', 'ArrowUp': 'btn-up',
+            'KeyS': 'btn-down', 'ArrowDown': 'btn-down',
+            'KeyA': 'btn-left', 'ArrowLeft': 'btn-left',
+            'KeyD': 'btn-right', 'ArrowRight': 'btn-right',
+            'Space': 'btn-stop'
+        };
+
+        document.addEventListener('keydown', function(event) {
+            // Prevent browser from scrolling when pressing arrows or spacebar
+            if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) {
+                event.preventDefault();
+            }
+
+            if (activeKey === event.code) return; // Prevent auto-repeat stutter
+            activeKey = event.code;
+
+            // Add the "pressed" visual effect to the button
+            if (keyMap[event.code]) {
+                document.getElementById(keyMap[event.code]).classList.add('active');
+            }
+
+            if (event.code === 'KeyW' || event.code === 'ArrowUp') goForward();
+            else if (event.code === 'KeyS' || event.code === 'ArrowDown') goBackward();
+            else if (event.code === 'KeyA' || event.code === 'ArrowLeft') goLeft();
+            else if (event.code === 'KeyD' || event.code === 'ArrowRight') goRight();
+            else if (event.code === 'Space') stopBuggy();
+        });
+
+        document.addEventListener('keyup', function(event) {
+            // Remove the "pressed" visual effect
+            if (keyMap[event.code]) {
+                document.getElementById(keyMap[event.code]).classList.remove('active');
+            }
+
+            if (activeKey === event.code) {
+                stopBuggy();
+                activeKey = null;
+            }
+        });
+    </script>
+</body>
+</html>

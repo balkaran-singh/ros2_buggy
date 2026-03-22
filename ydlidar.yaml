@@ -1,4 +1,3 @@
-# DIRECTORY - buggy_ws/src/ydlidar_ros2_driver/params/ydlidar.yaml
 ydlidar_ros2_driver_node:
   ros__parameters:
     port: /dev/ttyUSB0
@@ -12,7 +11,7 @@ ydlidar_ros2_driver_node:
     intensity_bit: 0
     sample_rate: 5
     abnormal_check_count: 4
-    fixed_resolution: true
+    fixed_resolution: false
     reversion: true
     inverted: true
     auto_reconnect: true
@@ -24,3 +23,4 @@ ydlidar_ros2_driver_node:
     frequency: 10.0
     invalid_range_is_inf: false
     debug: false
+    
